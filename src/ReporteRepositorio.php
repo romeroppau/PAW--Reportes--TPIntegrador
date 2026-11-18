@@ -92,30 +92,31 @@ class ReporteRepositorio
     }
 
     public static function obtenerTurnosAtendidos(?string $desde, ?string $hasta): array
-    $pdo = Database::conectar();
-    $sql = "SELECT t.*, m.nombre AS mascota_nombre FROM v_turnos_atendidos t JOIN mascota m ON m.id = t.mascota_id WHERE 1=1";
-    $params = [];
-    if ($desde) { $sql .= " AND t.fecha >= :desde"; $params['desde'] = $desde; }
-    if ($hasta) { $sql .= " AND t.fecha <= :hasta"; $params['hasta'] = $hasta; }
-    $stmt = $pdo->prepare($sql);
-    $stmt->execute($params);
-    return $stmt->fetchAll();
-}
+    {
+        $pdo = Database::conectar();
+        $sql = "SELECT t.*, m.nombre AS mascota_nombre FROM v_turnos_atendidos t JOIN mascota m ON m.id = t.mascota_id WHERE 1=1";
+        $params = [];
+        if ($desde) { $sql .= " AND t.fecha >= :desde"; $params['desde'] = $desde; }
+        if ($hasta) { $sql .= " AND t.fecha <= :hasta"; $params['hasta'] = $hasta; }
+        $stmt = $pdo->prepare($sql);
+        $stmt->execute($params);
+        return $stmt->fetchAll();
+    }
 
-public static function obtenerStockYMovimientos(?string $desde, ?string $hasta): array
-{
-    $pdo = Database::conectar();
-    $productos = $pdo->query("SELECT * FROM producto WHERE activo = 1")->fetchAll();
-    $insumos = $pdo->query("SELECT * FROM insumo WHERE activo = 1")->fetchAll();
-    
-    $sql = "SELECT * FROM movimiento_inventario WHERE 1=1";
-    $params = [];
-    if ($desde) { $sql .= " AND DATE(registrado_en) >= :desde"; $params['desde'] = $desde; }
-    if ($hasta) { $sql .= " AND DATE(registrado_en) <= :hasta"; $params['hasta'] = $hasta; }
-    $stmt = $pdo->prepare($sql);
-    $stmt->execute($params);
-    $movimientos = $stmt->fetchAll();
+    public static function obtenerStockYMovimientos(?string $desde, ?string $hasta): array
+    {
+        $pdo = Database::conectar();
+        $productos = $pdo->query("SELECT * FROM producto WHERE activo = 1")->fetchAll();
+        $insumos = $pdo->query("SELECT * FROM insumo WHERE activo = 1")->fetchAll();
+        
+        $sql = "SELECT * FROM movimiento_inventario WHERE 1=1";
+        $params = [];
+        if ($desde) { $sql .= " AND DATE(registrado_en) >= :desde"; $params['desde'] = $desde; }
+        if ($hasta) { $sql .= " AND DATE(registrado_en) <= :hasta"; $params['hasta'] = $hasta; }
+        $stmt = $pdo->prepare($sql);
+        $stmt->execute($params);
+        $movimientos = $stmt->fetchAll();
 
-    return ['productos' => $productos, 'insumos' => $insumos, 'movimientos' => $movimientos];
-}
+        return ['productos' => $productos, 'insumos' => $insumos, 'movimientos' => $movimientos];
+    }
 }
