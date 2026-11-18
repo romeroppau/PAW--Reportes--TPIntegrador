@@ -106,13 +106,14 @@ class ReporteRepositorio
     public static function obtenerStockYMovimientos(?string $desde, ?string $hasta): array
     {
         $pdo = Database::conectar();
-        $productos = $pdo->query("SELECT * FROM producto WHERE activo = 1")->fetchAll();
-        $insumos = $pdo->query("SELECT * FROM insumo WHERE activo = 1")->fetchAll();
+        $productos = $pdo->query("SELECT id, nombre, stock, precio, fecha_vencimiento FROM producto WHERE activo = 1")->fetchAll();
+        $insumos = $pdo->query("SELECT id, nombre, stock, costo, estado FROM insumo WHERE activo = 1")->fetchAll();
         
         $sql = "SELECT * FROM movimiento_inventario WHERE 1=1";
         $params = [];
-        if ($desde) { $sql .= " AND DATE(registrado_en) >= :desde"; $params['desde'] = $desde; }
-        if ($hasta) { $sql .= " AND DATE(registrado_en) <= :hasta"; $params['hasta'] = $hasta; }
+        if ($desde) { $sql .= " AND DATE(fecha) >= :desde"; $params['desde'] = $desde; }
+        if ($hasta) { $sql .= " AND DATE(fecha) <= :hasta"; $params['hasta'] = $hasta; }
+        $sql .= " ORDER BY fecha DESC, id DESC LIMIT 200";
         $stmt = $pdo->prepare($sql);
         $stmt->execute($params);
         $movimientos = $stmt->fetchAll();
