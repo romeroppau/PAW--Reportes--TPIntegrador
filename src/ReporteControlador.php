@@ -40,7 +40,7 @@ class ReporteControlador
         $sugerenciaFranja = "Los {$mejorClave['dia_semana']} a la {$mejorClave['franja']} hubo {$mejorClave['cantidad_turnos']} turnos en 4 semanas: conviene promocionarlos";
 
         // Productos a liquidar
-        $prodsVencer = ReporteRepositorio::obtenerProductosPorVencer();
+        $prodsVencer = ReporteRepositorio::obtenerProductosPorVencer(ParametrosMotor::diasLiquidar());
         $liquidarRes = [];
         foreach ($prodsVencer as $p) {
             $dto = $p['dias_restantes'] < 10 ? 30 : 15;
@@ -104,11 +104,13 @@ class ReporteControlador
         [$desde, $hasta] = $fechas;
         $datos = ReporteRepositorio::obtenerStockYMovimientos($desde, $hasta);
 
-        $prodBajo = count(array_filter($datos['productos'], fn($p) => $p['stock'] <= 10));
-        $insBajo = count(array_filter($datos['insumos'], fn($i) => $i['stock'] <= 10));
+        // Stock bajo: el límite que configuró la veterinaria (por defecto, 10 unidades o menos).
+        $limite = ParametrosMotor::limiteStockBajo();
+        $prodBajo = count(array_filter($datos['productos'], fn($p) => $p['stock'] <= $limite));
+        $insBajo = count(array_filter($datos['insumos'], fn($i) => $i['stock'] <= $limite));
 
         Response::json([
-            'resumen' => ['productos_stock_bajo' => $prodBajo, 'insumos_stock_bajo' => $insBajo],
+            'resumen' => ['productos_stock_bajo' => $prodBajo, 'insumos_stock_bajo' => $insBajo, 'limite_stock_bajo' => $limite],
             'productos' => $datos['productos'],
             'insumos' => $datos['insumos'],
             'movimientos' => $datos['movimientos']

@@ -23,11 +23,11 @@ Ejecuta las reglas diarias del MotorRecomendaciones tomando la fecha actual de A
 - Errores:
   - 401 Unauthorized: si falta el header X-Tarea-Token o no coincide.
 - Reglas ejecutadas:
-  1. Vacuna próxima (VACUNA): evento_sanitario sin aplicar (fecha_aplicada IS NULL) cuya fecha_programada cae entre hoy y los próximos 7 días (0 <= dias <= 7). Canales: WEB y WHATSAPP. id_operacion: vacuna-proxima-{evento}.
+  1. Vacuna próxima (VACUNA): evento_sanitario sin aplicar (fecha_aplicada IS NULL) cuya fecha_programada cae entre hoy y los próximos N días (N = `dias_aviso_vacuna`, por defecto 7). Canales: WEB y WHATSAPP. id_operacion: vacuna-proxima-{evento}.
   2. Vacuna vencida (VACUNA): evento_sanitario sin aplicar cuya fecha_programada es anterior a hoy (fecha_programada < hoy). Una vez por semana ISO (o-\WW). Canales: WEB y WHATSAPP. id_operacion: vacuna-vencida-{evento}-{semana}.
-  3. Control de adopción (CONTROL_ADOPCION): adopcion con estado = 'FINALIZADA' cuya DATE(fecha_fin) cumple exactamente 30 o 90 días hoy. Canales: WEB y WHATSAPP. id_operacion: control-{adopcion}-{30|90}.
-  4. Stock bajo (STOCK_BAJO): producto o insumo activo (activo = 1) con stock <= 10. Destinatario: veterinaria (WEB). id_operacion: stock-{tipo}-{id}-{fecha}.
-  5. Qué liquidar (PROMOCION): producto activo con stock > 0 y fecha_vencimiento entre hoy y los próximos 30 días. Descuento sugerido: 30% si faltan menos de 10 días (< 10), 15% si faltan entre 10 y 30 días. Destinatario: veterinaria (WEB). id_operacion: liquidar-{producto}-{semana}.
+  3. Control de adopción (CONTROL_ADOPCION): adopcion con estado = 'FINALIZADA' cuya DATE(fecha_fin) cumple exactamente los días del primer o del segundo control (`dias_control_adopcion_1` y `dias_control_adopcion_2`, por defecto 30 y 90). Canales: WEB y WHATSAPP. id_operacion: control-{adopcion}-{días del control}.
+  4. Stock bajo (STOCK_BAJO): producto o insumo activo (activo = 1) con stock <= `limite_stock_bajo` (por defecto 10). Destinatario: veterinaria (WEB). id_operacion: stock-{tipo}-{id}-{fecha}.
+  5. Qué liquidar (PROMOCION): producto activo con stock > 0 y fecha_vencimiento entre hoy y los próximos `dias_liquidar` días (por defecto 30). Descuento sugerido: 30% si faltan menos de 10 días (< 10), 15% si faltan 10 o más. Destinatario: veterinaria (WEB). id_operacion: liquidar-{producto}-{semana}.
 
 - 200 OK:
   {
@@ -54,11 +54,15 @@ Todos los endpoints de reportes exigen sesión activa con rol VETERINARIO (401 s
 ### GET /api/reportes/sugerencias
 Devuelve los dos cruces de datos con sus sugerencias concretas y los números de los que salen:
 1. que_promocionar (Franjas con pocos turnos): analiza los turnos no cancelados de las últimas 4 semanas (28 días hacia atrás desde hoy), agrupados por día de la semana (Lunes a Sábado) y franja horaria (mañana: antes de las 13:00; tarde: desde las 13:00). Identifica la franja con menor ocupación y genera el texto de sugerencia.
-2. que_liquidar (Productos por vencer con stock): productos activos con stock > 0 y fecha_vencimiento dentro de los próximos 30 días, indicando dias_restantes, stock, descuento_sugerido (15 o 30) y texto de sugerencia.
+2. que_liquidar (Productos por vencer con stock): productos activos con stock > 0 y fecha_vencimiento dentro de los próximos `dias_liquidar` días (por defecto 30), indicando dias_restantes, stock, descuento_sugerido (15 o 30) y texto de sugerencia.
 
 ### GET /api/reportes/turnos-atendidos?desde=YYYY-MM-DD&hasta=YYYY-MM-DD
 Consulta la vista v_turnos_atendidos (turno + consulta finalizada + cantidades de insumos y productos + factura), junto con los nombres de la mascota, dueño y veterinario.
 - Parámetros opcionales desde y hasta (YYYY-MM-DD). Si se envía uno con formato inválido o desde > hasta, responde 400 Bad Request.
 
 ### GET /api/reportes/stock?desde=YYYY-MM-DD&hasta=YYYY-MM-DD
-Devuelve el estado actual de productos e insumos activos (marcando cuáles tienen stock bajo <= 10 o están sin stock = 0) y el historial de movimiento_inventario (filtrable por desde y hasta).
+Devuelve el estado actual de productos e insumos activos (marcando cuáles tienen stock bajo, <= `limite_stock_bajo`, o están sin stock = 0). `resumen.limite_stock_bajo` dice el límite que se usó y el historial de movimiento_inventario (filtrable por desde y hasta).
+
+## Parámetros de la veterinaria (Entrega 5)
+
+Los días y el límite que usan el motor y los reportes los cambia la veterinaria desde su panel (tabla `configuracion`, migración 014; catálogo y reglas en `docs/api/contrato.md` de Backend, sección "Configuración"). Este módulo los lee con `comun/configuracion.php` (`src/ParametrosMotor.php`): si no están guardados, o lo guardado no sirve, usa los valores por defecto de siempre. El usuario `reportes` tiene `SELECT` sobre `configuracion`.
