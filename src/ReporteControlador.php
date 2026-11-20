@@ -7,43 +7,13 @@ class ReporteControlador
         Auth::requerirRol(['VETERINARIO']);
         $hoy = (new DateTime('now', new DateTimeZone('America/Argentina/Buenos_Aires')))->format('Y-m-d');
 
-        // Franjas turnos (últimas 4 semanas)
-        $turnos = ReporteRepositorio::obtenerTurnosUltimasCuatroSemanas();
-        $franjasConteo = [];
-        foreach ($turnos as $t) {
-            $timestamp = strtotime($t['fecha']);
-            $diaSemanaNum = (int)date('N', $timestamp); // 1=Lunes .. 7=Domingo
-            if ($diaSemanaNum > 6) continue; // solo lunes a sábado
-            $diasNombres = [1 => 'Lunes', 2 => 'Martes', 3 => 'Miércoles', 4 => 'Jueves', 5 => 'Viernes', 6 => 'Sábado'];
-            $diaNombre = $diasNombres[$diaSemanaNum];
-            $hora = (int)substr($t['hora'], 0, 2);
-            $franja = $hora < 13 ? 'mañana' : 'tarde';
-            $clave = "$diaNombre|$franja";
-            $franjasConteo[$clave] = ($franjasConteo[$clave] ?? 0) + 1;
-        }
-
-        // Encontrar menor ocupación
-        $menorCant = 999999;
-        $mejorClave = ['dia_semana' => 'Lunes', 'franja' => 'mañana', 'cantidad' => 0];
-        $listaFranjas = [];
-        foreach (['Lunes', 'Martes', 'Miércoles', 'Jueves', 'Viernes', 'Sábado'] as $d) {
-            foreach (['mañana', 'tarde'] as $f) {
-                $cant = $franjasConteo["$d|$f"] ?? 0;
-                $listaFranjas[] = ['dia_semana' => $d, 'franja' => $f, 'cantidad_turnos' => $cant];
-                if ($cant < $menorCant) {
-                    $menorCant = $cant;
-                    $mejorClave = ['dia_semana' => $d, 'franja' => $f, 'cantidad_turnos' => $cant];
-                }
-            }
-        }
-
-        $sugerenciaFranja = "Los {$mejorClave['dia_semana']} a la {$mejorClave['franja']} hubo {$mejorClave['cantidad_turnos']} turnos en 4 semanas: conviene promocionarlos";
+        $quePromocionar = MotorRecomendaciones::revisarFranjasConPocosTurnos();
 
         // Productos a liquidar
         $prodsVencer = ReporteRepositorio::obtenerProductosPorVencer(ParametrosMotor::diasLiquidar());
         $liquidarRes = [];
         foreach ($prodsVencer as $p) {
-            $dto = $p['dias_restantes'] < 10 ? 30 : 15;
+            $dto = (int)$p['dias_restantes'] < 10 ? 30 : 15;
             $precioSugerido = round($p['precio'] * (1 - $dto / 100), 2);
             $liquidarRes[] = [
                 'producto_id' => (int)$p['id'],
@@ -60,16 +30,7 @@ class ReporteControlador
 
         Response::json([
             'fecha_referencia' => $hoy,
-            'que_promocionar' => [
-                'franja_sugerida' => [
-                    'dia_semana' => $mejorClave['dia_semana'],
-                    'franja' => $mejorClave['franja'],
-                    'cantidad_turnos' => $mejorClave['cantidad_turnos'],
-                    'semanas_analizadas' => 4,
-                    'sugerencia' => $sugerenciaFranja
-                ],
-                'franjas' => $listaFranjas
-            ],
+            'que_promocionar' => $quePromocionar,
             'que_liquidar' => $liquidarRes
         ]);
     }
@@ -122,7 +83,7 @@ class ReporteControlador
         $tokenEsperado = Config::get('TAREAS_TOKEN') ?: '';
         $tokenEnviado = $_SERVER['HTTP_X_TAREA_TOKEN'] ?? '';
 
-        if (!is_string($tokenEnviado) || !hash_equals($tokenEsperado, $tokenEnviado)) {
+        if ($tokenEsperado === '' || !is_string($tokenEnviado) || !hash_equals($tokenEsperado, $tokenEnviado)) {
             Response::error('No autorizado', 401);
             return;
         }
