@@ -21,7 +21,7 @@ class MotorRecomendaciones
         ];
 
         // 1. Vacuna próxima
-        foreach (ReporteRepositorio::obtenerVacunasProximas() as $vacuna) {
+        foreach (ReporteRepositorio::obtenerVacunasProximas(ParametrosMotor::diasAvisoVacuna()) as $vacuna) {
             $generados++;
             $mensaje = "A {$vacuna['mascota_nombre']} le toca la vacuna {$vacuna['vacuna']} el {$vacuna['fecha_programada']}";
             $idOpWeb = "vacuna-proxima-{$vacuna['evento_id']}-web";
@@ -48,10 +48,10 @@ class MotorRecomendaciones
             if (($resWa['datos']['aplicado'] ?? false) === true) { $aplicados++; $detalle['vacuna_vencida']++; } else $repetidos++;
         }
 
-        // 3. Control de adopción
-        foreach (ReporteRepositorio::obtenerControlesAdopcion($hoy) as $ctrl) {
-            $dias = (int)((strtotime($hoy) - strtotime($ctrl['fecha_fin'])) / 86400);
-            $tipoControl = $dias >= 80 ? 90 : 30;
+        // 3. Control de adopción (a los días que configuró la veterinaria; por defecto, 30 y 90)
+        [$primerControl, $segundoControl] = ParametrosMotor::controlesAdopcion();
+        foreach (ReporteRepositorio::obtenerControlesAdopcion($hoy, $primerControl, $segundoControl) as $ctrl) {
+            $tipoControl = (int) $ctrl['dias_control'];
             $generados++;
             $mensaje = "Se cumplen {$tipoControl} días de la adopción de {$ctrl['mascota_nombre']}. Corresponde control veterinario.";
             $idOpWeb = "control-{$ctrl['adopcion_id']}-{$tipoControl}-web";
@@ -65,7 +65,7 @@ class MotorRecomendaciones
         }
 
         // 4. Stock bajo (asumimos usuario ID 101 administrador/veterinaria)
-        foreach (ReporteRepositorio::obtenerStockBajo() as $item) {
+        foreach (ReporteRepositorio::obtenerStockBajo(ParametrosMotor::limiteStockBajo()) as $item) {
             $generados++;
             $mensaje = "Stock bajo para {$item['tipo']} '{$item['nombre']}' (quedan {$item['stock']} unidades).";
             $idOp = "stock-{$item['tipo']}-{$item['id']}-{$hoy}";
@@ -75,7 +75,7 @@ class MotorRecomendaciones
         }
 
         // 5. Qué liquidar
-        foreach (ReporteRepositorio::obtenerProductosPorVencer() as $prod) {
+        foreach (ReporteRepositorio::obtenerProductosPorVencer(ParametrosMotor::diasLiquidar()) as $prod) {
             $dto = $prod['dias_restantes'] < 10 ? 30 : 15;
             $generados++;
             $mensaje = "{$prod['nombre']}: vence el {$prod['fecha_vencimiento']}, quedan {$prod['stock']}. Descuento sugerido: {$dto}%";

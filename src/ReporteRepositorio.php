@@ -2,10 +2,11 @@
 
 class ReporteRepositorio
 {
-    public static function obtenerVacunasProximas(): array
+    // Las que le tocan entre hoy y dentro de $dias días (ParametrosMotor::diasAvisoVacuna()).
+    public static function obtenerVacunasProximas(int $dias): array
     {
         $pdo = Database::conectar();
-        $stmt = $pdo->query("
+        $stmt = $pdo->prepare("
             SELECT e.id AS evento_id, e.nombre AS vacuna, e.fecha_programada,
                    m.id AS mascota_id, m.nombre AS mascota_nombre, u.id AS usuario_id, u.telefono
             FROM evento_sanitario e
@@ -13,8 +14,9 @@ class ReporteRepositorio
             JOIN usuario u ON u.id = m.duenio_id
             WHERE e.tipo = 'VACUNA'
               AND e.fecha_aplicada IS NULL
-              AND e.fecha_programada BETWEEN CURDATE() AND DATE_ADD(CURDATE(), INTERVAL 7 DAY)
+              AND e.fecha_programada BETWEEN CURDATE() AND DATE_ADD(CURDATE(), INTERVAL ? DAY)
         ");
+        $stmt->execute([$dias]);
         return $stmt->fetchAll();
     }
 
@@ -34,8 +36,12 @@ class ReporteRepositorio
         return $stmt->fetchAll();
     }
 
-    public static function obtenerControlesAdopcion(string $hoy): array
+    // Las adopciones que hoy cumplen exactamente $primero o $segundo días (ParametrosMotor::controlesAdopcion()).
+    // Cada fila trae dias_control: cuál de los dos controles le corresponde.
+    public static function obtenerControlesAdopcion(string $hoy, int $primero, int $segundo): array
     {
+        $fechaPrimero = (new DateTimeImmutable($hoy))->modify("-$primero days")->format('Y-m-d');
+        $fechaSegundo = (new DateTimeImmutable($hoy))->modify("-$segundo days")->format('Y-m-d');
         $pdo = Database::conectar();
         $stmt = $pdo->prepare("
             SELECT a.id AS adopcion_id, a.fecha_fin, m.nombre AS mascota_nombre, u.id AS adoptante_id
@@ -44,37 +50,43 @@ class ReporteRepositorio
             JOIN mascota m ON m.id = p.mascota_id
             JOIN usuario u ON u.id = a.adoptante_id
             WHERE a.estado = 'FINALIZADA'
-              AND (
-                DATE(a.fecha_fin) = DATE_SUB(:hoy1, INTERVAL 30 DAY)
-                OR DATE(a.fecha_fin) = DATE_SUB(:hoy2, INTERVAL 90 DAY)
-              )
+              AND DATE(a.fecha_fin) IN (?, ?)
         ");
-        $stmt->execute(['hoy1' => $hoy, 'hoy2' => $hoy]);
-        return $stmt->fetchAll();
+        $stmt->execute([$fechaPrimero, $fechaSegundo]);
+        $filas = $stmt->fetchAll();
+        foreach ($filas as &$fila) {
+            $fila['dias_control'] = substr((string) $fila['fecha_fin'], 0, 10) === $fechaSegundo ? $segundo : $primero;
+        }
+        unset($fila);
+        return $filas;
     }
 
-    public static function obtenerStockBajo(): array
+    // Con $limite unidades o menos (ParametrosMotor::limiteStockBajo()).
+    public static function obtenerStockBajo(int $limite): array
     {
         $pdo = Database::conectar();
-        $stmt = $pdo->query("
-            SELECT 'producto' AS tipo, id, nombre, stock FROM producto WHERE activo = 1 AND stock <= 10
+        $stmt = $pdo->prepare("
+            SELECT 'producto' AS tipo, id, nombre, stock FROM producto WHERE activo = 1 AND stock <= ?
             UNION ALL
-            SELECT 'insumo' AS tipo, id, nombre, stock FROM insumo WHERE activo = 1 AND stock <= 10
+            SELECT 'insumo' AS tipo, id, nombre, stock FROM insumo WHERE activo = 1 AND stock <= ?
         ");
+        $stmt->execute([$limite, $limite]);
         return $stmt->fetchAll();
     }
 
-    public static function obtenerProductosPorVencer(): array
+    // Los que vencen entre hoy y dentro de $dias días (ParametrosMotor::diasLiquidar()).
+    public static function obtenerProductosPorVencer(int $dias): array
     {
         $pdo = Database::conectar();
-        $stmt = $pdo->query("
+        $stmt = $pdo->prepare("
             SELECT id, nombre, stock, precio, fecha_vencimiento,
                    DATEDIFF(fecha_vencimiento, CURDATE()) AS dias_restantes
             FROM producto
             WHERE activo = 1
               AND stock > 0
-              AND fecha_vencimiento BETWEEN CURDATE() AND DATE_ADD(CURDATE(), INTERVAL 30 DAY)
+              AND fecha_vencimiento BETWEEN CURDATE() AND DATE_ADD(CURDATE(), INTERVAL ? DAY)
         ");
+        $stmt->execute([$dias]);
         return $stmt->fetchAll();
     }
 
