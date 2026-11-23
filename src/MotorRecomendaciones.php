@@ -135,6 +135,8 @@ class MotorRecomendaciones
 
         $sugerencia = "Los {$mejorClave['dia_semana']} a la {$mejorClave['franja']} hubo {$mejorClave['cantidad_turnos']} turnos en 4 semanas: conviene promocionarlos";
 
+        $precio = ParametrosMotor::precioConsulta();
+
         return [
             'franja_sugerida' => [
                 'dia_semana' => $mejorClave['dia_semana'],
@@ -144,7 +146,37 @@ class MotorRecomendaciones
                 'sugerencia' => $sugerencia,
             ],
             'franjas' => $listaFranjas,
+            'precio_consulta' => $precio,
+            'a_promocionar' => self::franjasAPromocionar($listaFranjas, $precio),
         ];
+    }
+
+    // Las franjas que conviene promocionar (Entrega 5): las 5 con menos turnos (si empatan, la primera
+    // de la semana), cada una con un descuento sugerido para la consulta. La veterinaria decide si la
+    // publicita y con qué porcentaje (Pacientes, POST /api/pacientes/promociones-turnos).
+    //   - Sin turnos en 4 semanas: 25 %.  - 1 o 2 turnos: 15 %.  - Más: 10 %.
+    // dia_numero (1 = lunes) y franja_codigo (MANIANA o TARDE) son los que usa Pacientes.
+    public const FRANJAS_A_PROMOCIONAR = 5;
+
+    public static function franjasAPromocionar(array $franjas, int $precio): array
+    {
+        $numeros = ['Lunes' => 1, 'Martes' => 2, 'Miércoles' => 3, 'Jueves' => 4, 'Viernes' => 5, 'Sábado' => 6];
+        $orden = array_keys($franjas);
+        usort($orden, fn ($a, $b) => [$franjas[$a]['cantidad_turnos'], $a] <=> [$franjas[$b]['cantidad_turnos'], $b]);
+
+        $resultado = [];
+        foreach (array_slice($orden, 0, self::FRANJAS_A_PROMOCIONAR) as $i) {
+            $f = $franjas[$i];
+            $descuento = $f['cantidad_turnos'] === 0 ? 25 : ($f['cantidad_turnos'] <= 2 ? 15 : 10);
+            $resultado[] = $f + [
+                'dia_numero' => $numeros[$f['dia_semana']],
+                'franja_codigo' => $f['franja'] === 'mañana' ? 'MANIANA' : 'TARDE',
+                'descuento_sugerido' => $descuento,
+                'precio_sugerido' => round($precio * (100 - $descuento) / 100, 2),
+            ];
+        }
+
+        return $resultado;
     }
 
     private static function enviarPorCanales(
