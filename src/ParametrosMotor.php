@@ -27,6 +27,13 @@ class ParametrosMotor
         return Configuracion::entero('limite_stock_bajo', 10, 0, 1000);
     }
 
+    // El precio base de la consulta (Pacientes lo usa para el precio de cada turno). Acá, para mostrar
+    // el precio con el descuento sugerido de las franjas a promocionar.
+    public static function precioConsulta(): int
+    {
+        return Configuracion::entero('precio_consulta', 15000, 0, 1000000);
+    }
+
     // Qué liquidar: productos que vencen entre hoy y dentro de estos días.
     public static function diasLiquidar(): int
     {

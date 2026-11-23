@@ -54,6 +54,7 @@ Todos los endpoints de reportes exigen sesión activa con rol VETERINARIO (401 s
 ### GET /api/reportes/sugerencias
 Devuelve los dos cruces de datos con sus sugerencias concretas y los números de los que salen:
 1. que_promocionar (Franjas con pocos turnos): analiza los turnos no cancelados de las últimas 4 semanas (28 días hacia atrás desde hoy), agrupados por día de la semana (Lunes a Sábado) y franja horaria (mañana: antes de las 13:00; tarde: desde las 13:00). Identifica la franja con menor ocupación y genera el texto de sugerencia.
+   - `a_promocionar` (Entrega 5): las **5 franjas con menos turnos** (si empatan, la primera de la semana), para promocionarlas con un descuento a la consulta. Cada una trae `dia_semana`, `franja`, `cantidad_turnos`, `dia_numero` (1 = lunes), `franja_codigo` (`MANIANA` o `TARDE`), `descuento_sugerido` (25 % si no tuvo turnos, 15 % con 1 o 2, 10 % con más) y `precio_sugerido` (el precio base con ese descuento). `precio_consulta`: el precio base de la configuración. La veterinaria decide si la publicita y con qué porcentaje: `POST /api/pacientes/promociones-turnos` de Pacientes (contrato-mascotas-turnos.md, "Precio del turno y franjas promocionadas").
 2. que_liquidar (Productos por vencer con stock): productos activos con stock > 0 y fecha_vencimiento dentro de los próximos `dias_liquidar` días (por defecto 30), indicando dias_restantes, stock, descuento_sugerido (15 o 30) y texto de sugerencia.
 
 ### GET /api/reportes/turnos-atendidos?desde=YYYY-MM-DD&hasta=YYYY-MM-DD
