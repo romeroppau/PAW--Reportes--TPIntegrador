@@ -41,17 +41,25 @@ class MotorRecomendaciones
         ];
     }
 
+    // "2026-11-24" (como viene de la base) -> "24/11/2026": en los avisos (web y WhatsApp) las fechas
+    // van en día/mes/año, como en todo el sitio. Si no es una fecha, queda como vino.
+    public static function fecha(?string $valor): string
+    {
+        $fecha = DateTimeImmutable::createFromFormat('!Y-m-d', substr((string) $valor, 0, 10));
+        return $fecha === false ? (string) $valor : $fecha->format('d/m/Y');
+    }
+
     // Reglas 1 y 2: Vacuna próxima (dentro de N días) y Vacuna vencida (una vez por semana ISO).
     public static function recordarCalendarioSanitario(string $hoy, string $ahora, string $semanaIso, array &$conteo): void
     {
         foreach (ReporteRepositorio::obtenerVacunasProximas(ParametrosMotor::diasAvisoVacuna()) as $vacuna) {
-            $mensaje = "A {$vacuna['mascota_nombre']} le toca la vacuna {$vacuna['vacuna']} el {$vacuna['fecha_programada']}";
+            $mensaje = "A {$vacuna['mascota_nombre']} le toca la vacuna {$vacuna['vacuna']} el " . self::fecha($vacuna['fecha_programada']);
             $idBase = "vacuna-proxima-{$vacuna['evento_id']}";
             self::enviarPorCanales((int) $vacuna['usuario_id'], 'VACUNA', $mensaje, $ahora, $idBase, ['web' => 'WEB', 'wa' => 'WHATSAPP'], 'vacuna_proxima', $conteo);
         }
 
         foreach (ReporteRepositorio::obtenerVacunasVencidas() as $vacuna) {
-            $mensaje = "La vacuna {$vacuna['vacuna']} de {$vacuna['mascota_nombre']} está vencida desde el {$vacuna['fecha_programada']}";
+            $mensaje = "La vacuna {$vacuna['vacuna']} de {$vacuna['mascota_nombre']} está vencida desde el " . self::fecha($vacuna['fecha_programada']);
             $idBase = "vacuna-vencida-{$vacuna['evento_id']}-{$semanaIso}";
             self::enviarPorCanales((int) $vacuna['usuario_id'], 'VACUNA', $mensaje, $ahora, $idBase, ['web' => 'WEB', 'wa' => 'WHATSAPP'], 'vacuna_vencida', $conteo);
         }
@@ -84,7 +92,7 @@ class MotorRecomendaciones
     {
         foreach (ReporteRepositorio::obtenerProductosPorVencer(ParametrosMotor::diasLiquidar()) as $prod) {
             $dto = (int) $prod['dias_restantes'] < 10 ? 30 : 15;
-            $mensaje = "{$prod['nombre']}: vence el {$prod['fecha_vencimiento']}, quedan {$prod['stock']}. Descuento sugerido: {$dto}%";
+            $mensaje = "{$prod['nombre']}: vence el " . self::fecha($prod['fecha_vencimiento']) . ", quedan {$prod['stock']}. Descuento sugerido: {$dto}%";
             $idOp = "liquidar-{$prod['id']}-{$semanaIso}";
             self::enviarUnico(self::VETERINARIO_ID, 'PROMOCION', 'WEB', $mensaje, $ahora, $idOp, 'liquidar', $conteo);
         }
