@@ -2,7 +2,6 @@
 
 class MotorRecomendaciones
 {
-    private const VETERINARIO_ID = 101;
 
     public static function ejecutarDiario(): array
     {
@@ -80,21 +79,29 @@ class MotorRecomendaciones
     // Regla 4: Stock bajo (productos e insumos activos con stock <= limite_stock_bajo).
     public static function revisarStockBajo(string $hoy, string $ahora, array &$conteo): void
     {
+        // A cada veterinaria (25/11: antes iba solo al usuario 101, la veterinaria de prueba; en producción
+        // la veterinaria es otro usuario y no le llegaba).
+        $veterinarias = ReporteRepositorio::veterinarias();
         foreach (ReporteRepositorio::obtenerStockBajo(ParametrosMotor::limiteStockBajo()) as $item) {
             $mensaje = "Stock bajo para {$item['tipo']} '{$item['nombre']}' (quedan {$item['stock']} unidades).";
-            $idOp = "stock-{$item['tipo']}-{$item['id']}-{$hoy}";
-            self::enviarUnico(self::VETERINARIO_ID, 'STOCK_BAJO', 'WEB', $mensaje, $ahora, $idOp, 'stock_bajo', $conteo);
+            foreach ($veterinarias as $veterinaria) {
+                $idOp = "stock-{$item['tipo']}-{$item['id']}-{$hoy}-vet-{$veterinaria}";
+                self::enviarUnico($veterinaria, 'STOCK_BAJO', 'WEB', $mensaje, $ahora, $idOp, 'stock_bajo', $conteo);
+            }
         }
     }
 
     // Regla 5 (aviso web) y cruce "Qué liquidar": productos activos con stock > 0 próximos a vencer.
     public static function revisarVencimientos(string $ahora, string $semanaIso, array &$conteo): void
     {
+        $veterinarias = ReporteRepositorio::veterinarias();
         foreach (ReporteRepositorio::obtenerProductosPorVencer(ParametrosMotor::diasLiquidar()) as $prod) {
             $dto = (int) $prod['dias_restantes'] < 10 ? 30 : 15;
             $mensaje = "{$prod['nombre']}: vence el " . self::fecha($prod['fecha_vencimiento']) . ", quedan {$prod['stock']}. Descuento sugerido: {$dto}%";
-            $idOp = "liquidar-{$prod['id']}-{$semanaIso}";
-            self::enviarUnico(self::VETERINARIO_ID, 'PROMOCION', 'WEB', $mensaje, $ahora, $idOp, 'liquidar', $conteo);
+            foreach ($veterinarias as $veterinaria) {
+                $idOp = "liquidar-{$prod['id']}-{$semanaIso}-vet-{$veterinaria}";
+                self::enviarUnico($veterinaria, 'PROMOCION', 'WEB', $mensaje, $ahora, $idOp, 'liquidar', $conteo);
+            }
         }
     }
 
