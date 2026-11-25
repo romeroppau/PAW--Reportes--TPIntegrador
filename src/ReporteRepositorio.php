@@ -61,6 +61,13 @@ class ReporteRepositorio
         return $filas;
     }
 
+    // Las veterinarias (los avisos de stock y de qué liquidar van a cada una).
+    public static function veterinarias(): array
+    {
+        $filas = Database::conectar()->query("SELECT id FROM usuario WHERE rol = 'VETERINARIO' ORDER BY id")->fetchAll();
+        return array_map(fn (array $f): int => (int) $f['id'], $filas);
+    }
+
     // Con $limite unidades o menos (ParametrosMotor::limiteStockBajo()).
     public static function obtenerStockBajo(int $limite): array
     {
