@@ -26,8 +26,8 @@ Ejecuta las reglas diarias del MotorRecomendaciones tomando la fecha actual de A
   1. Vacuna próxima (VACUNA): evento_sanitario sin aplicar (fecha_aplicada IS NULL) cuya fecha_programada cae entre hoy y los próximos N días (N = `dias_aviso_vacuna`, por defecto 7). Canales: WEB y WHATSAPP. id_operacion: vacuna-proxima-{evento}.
   2. Vacuna vencida (VACUNA): evento_sanitario sin aplicar cuya fecha_programada es anterior a hoy (fecha_programada < hoy). Una vez por semana ISO (o-\WW). Canales: WEB y WHATSAPP. id_operacion: vacuna-vencida-{evento}-{semana}.
   3. Control de adopción (CONTROL_ADOPCION): adopcion con estado = 'FINALIZADA' cuya DATE(fecha_fin) cumple exactamente los días del primer o del segundo control (`dias_control_adopcion_1` y `dias_control_adopcion_2`, por defecto 30 y 90). Canales: WEB y WHATSAPP. id_operacion: control-{adopcion}-{días del control}.
-  4. Stock bajo (STOCK_BAJO): producto o insumo activo (activo = 1) con stock <= `limite_stock_bajo` (por defecto 10). Destinatario: veterinaria (WEB). id_operacion: stock-{tipo}-{id}-{fecha}.
-  5. Qué liquidar (PROMOCION): producto activo con stock > 0 y fecha_vencimiento entre hoy y los próximos `dias_liquidar` días (por defecto 30). Descuento sugerido: 30% si faltan menos de 10 días (< 10), 15% si faltan 10 o más. Destinatario: veterinaria (WEB). id_operacion: liquidar-{producto}-{semana}.
+  4. Stock bajo (STOCK_BAJO): producto o insumo activo (activo = 1) con stock <= `limite_stock_bajo` (por defecto 10). Destinatario: cada veterinaria (WEB; 25/11, antes solo la 101). id_operacion: stock-{tipo}-{id}-{fecha}-vet-{veterinaria}.
+  5. Qué liquidar (PROMOCION): producto activo con stock > 0 y fecha_vencimiento entre hoy y los próximos `dias_liquidar` días (por defecto 30). Descuento sugerido: 30% si faltan menos de 10 días (< 10), 15% si faltan 10 o más. Destinatario: cada veterinaria (WEB; 25/11, antes solo la 101). id_operacion: liquidar-{producto}-{semana}-vet-{veterinaria}.
 
 - 200 OK:
   {
