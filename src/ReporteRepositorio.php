@@ -68,8 +68,8 @@ class ReporteRepositorio
         return array_map(fn (array $f): int => (int) $f['id'], $filas);
     }
 
-    // Con $limite unidades o menos (ParametrosMotor::limiteStockBajo()). De un producto cuenta lo que
-    // se puede vender: sin sus lotes vencidos (migración 028).
+    // Con $limite unidades o menos (ParametrosMotor::limiteStockBajo()). Cuenta lo que se puede vender
+    // o usar: sin los lotes vencidos (migración 028 en productos, 029 en insumos).
     public static function obtenerStockBajo(int $limite): array
     {
         $pdo = Database::conectar();
@@ -81,7 +81,12 @@ class ReporteRepositorio
                 FROM producto p WHERE p.activo = 1
             ) productos WHERE stock <= ?
             UNION ALL
-            SELECT 'insumo' AS tipo, id, nombre, stock FROM insumo WHERE activo = 1 AND stock <= ?
+            SELECT * FROM (
+                SELECT 'insumo' AS tipo, i.id, i.nombre,
+                       (SELECT COALESCE(SUM(l.stock), 0) FROM lote_insumo l
+                        WHERE l.insumo_id = i.id AND (l.vencimiento IS NULL OR l.vencimiento >= CURDATE())) AS stock
+                FROM insumo i WHERE i.activo = 1
+            ) insumos WHERE stock <= ?
         ");
         $stmt->execute([$limite, $limite]);
         return $stmt->fetchAll();
@@ -93,7 +98,7 @@ class ReporteRepositorio
     {
         $pdo = Database::conectar();
         $stmt = $pdo->prepare("
-            SELECT p.id AS producto_id, p.nombre, p.precio, l.id AS lote_id, l.codigo, l.stock,
+            SELECT p.id AS producto_id, p.nombre, p.precio, l.id AS lote_id, l.numero, l.codigo, l.stock,
                    DATE_FORMAT(l.vencimiento, '%Y-%m-%d') AS fecha_vencimiento,
                    DATEDIFF(l.vencimiento, CURDATE()) AS dias_restantes
             FROM lote_producto l
@@ -107,18 +112,26 @@ class ReporteRepositorio
         return $stmt->fetchAll();
     }
 
-    // Los lotes vencidos que todavía tienen stock (ya no se venden: hay que retirarlos), de los
-    // productos activos.
+    // Los lotes vencidos que todavía tienen stock (ya no se venden ni se usan: hay que retirarlos), de
+    // los productos y, desde la migración 029, de los insumos activos. tipo: "producto" o "insumo".
     public static function obtenerLotesVencidos(): array
     {
         $pdo = Database::conectar();
         return $pdo->query("
-            SELECT p.id AS producto_id, p.nombre, l.id AS lote_id, l.codigo, l.stock,
-                   DATE_FORMAT(l.vencimiento, '%Y-%m-%d') AS fecha_vencimiento
-            FROM lote_producto l
-            JOIN producto p ON p.id = l.producto_id
-            WHERE p.activo = 1 AND l.stock > 0 AND l.vencimiento < CURDATE()
-            ORDER BY l.vencimiento, p.nombre, l.id
+            SELECT * FROM (
+                SELECT 'producto' AS tipo, p.id AS producto_id, NULL AS insumo_id, p.nombre, l.id AS lote_id,
+                       l.numero, l.codigo, l.stock, DATE_FORMAT(l.vencimiento, '%Y-%m-%d') AS fecha_vencimiento
+                FROM lote_producto l
+                JOIN producto p ON p.id = l.producto_id
+                WHERE p.activo = 1 AND l.stock > 0 AND l.vencimiento < CURDATE()
+                UNION ALL
+                SELECT 'insumo', NULL, i.id, i.nombre, l.id, l.numero, l.codigo, l.stock,
+                       DATE_FORMAT(l.vencimiento, '%Y-%m-%d')
+                FROM lote_insumo l
+                JOIN insumo i ON i.id = l.insumo_id
+                WHERE i.activo = 1 AND l.stock > 0 AND l.vencimiento < CURDATE()
+            ) vencidos
+            ORDER BY fecha_vencimiento, tipo DESC, nombre, lote_id
         ")->fetchAll();
     }
 
