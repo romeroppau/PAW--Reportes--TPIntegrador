@@ -68,12 +68,18 @@ class ReporteRepositorio
         return array_map(fn (array $f): int => (int) $f['id'], $filas);
     }
 
-    // Con $limite unidades o menos (ParametrosMotor::limiteStockBajo()).
+    // Con $limite unidades o menos (ParametrosMotor::limiteStockBajo()). De un producto cuenta lo que
+    // se puede vender: sin sus lotes vencidos (migración 028).
     public static function obtenerStockBajo(int $limite): array
     {
         $pdo = Database::conectar();
         $stmt = $pdo->prepare("
-            SELECT 'producto' AS tipo, id, nombre, stock FROM producto WHERE activo = 1 AND stock <= ?
+            SELECT * FROM (
+                SELECT 'producto' AS tipo, p.id, p.nombre,
+                       (SELECT COALESCE(SUM(l.stock), 0) FROM lote_producto l
+                        WHERE l.producto_id = p.id AND (l.vencimiento IS NULL OR l.vencimiento >= CURDATE())) AS stock
+                FROM producto p WHERE p.activo = 1
+            ) productos WHERE stock <= ?
             UNION ALL
             SELECT 'insumo' AS tipo, id, nombre, stock FROM insumo WHERE activo = 1 AND stock <= ?
         ");
@@ -81,20 +87,39 @@ class ReporteRepositorio
         return $stmt->fetchAll();
     }
 
-    // Los que vencen entre hoy y dentro de $dias días (ParametrosMotor::diasLiquidar()).
-    public static function obtenerProductosPorVencer(int $dias): array
+    // Los lotes con stock que vencen entre hoy y dentro de $dias días (ParametrosMotor::diasLiquidar()),
+    // de los productos activos, el que vence primero arriba (migración 028: el vencimiento es de cada lote).
+    public static function obtenerLotesPorVencer(int $dias): array
     {
         $pdo = Database::conectar();
         $stmt = $pdo->prepare("
-            SELECT id, nombre, stock, precio, fecha_vencimiento,
-                   DATEDIFF(fecha_vencimiento, CURDATE()) AS dias_restantes
-            FROM producto
-            WHERE activo = 1
-              AND stock > 0
-              AND fecha_vencimiento BETWEEN CURDATE() AND DATE_ADD(CURDATE(), INTERVAL ? DAY)
+            SELECT p.id AS producto_id, p.nombre, p.precio, l.id AS lote_id, l.codigo, l.stock,
+                   DATE_FORMAT(l.vencimiento, '%Y-%m-%d') AS fecha_vencimiento,
+                   DATEDIFF(l.vencimiento, CURDATE()) AS dias_restantes
+            FROM lote_producto l
+            JOIN producto p ON p.id = l.producto_id
+            WHERE p.activo = 1
+              AND l.stock > 0
+              AND l.vencimiento BETWEEN CURDATE() AND DATE_ADD(CURDATE(), INTERVAL ? DAY)
+            ORDER BY l.vencimiento, p.nombre, l.id
         ");
         $stmt->execute([$dias]);
         return $stmt->fetchAll();
+    }
+
+    // Los lotes vencidos que todavía tienen stock (ya no se venden: hay que retirarlos), de los
+    // productos activos.
+    public static function obtenerLotesVencidos(): array
+    {
+        $pdo = Database::conectar();
+        return $pdo->query("
+            SELECT p.id AS producto_id, p.nombre, l.id AS lote_id, l.codigo, l.stock,
+                   DATE_FORMAT(l.vencimiento, '%Y-%m-%d') AS fecha_vencimiento
+            FROM lote_producto l
+            JOIN producto p ON p.id = l.producto_id
+            WHERE p.activo = 1 AND l.stock > 0 AND l.vencimiento < CURDATE()
+            ORDER BY l.vencimiento, p.nombre, l.id
+        ")->fetchAll();
     }
 
     public static function obtenerTurnosUltimasCuatroSemanas(): array

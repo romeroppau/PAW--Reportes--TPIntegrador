@@ -22,6 +22,7 @@ class MotorRecomendaciones
                 'control_adopcion' => 0,
                 'stock_bajo' => 0,
                 'liquidar' => 0,
+                'lote_vencido' => 0,
             ],
         ];
 
@@ -91,16 +92,23 @@ class MotorRecomendaciones
         }
     }
 
-    // Regla 5 (aviso web) y cruce "Qué liquidar": productos activos con stock > 0 próximos a vencer.
+    // Regla 5 (aviso web) y cruce "Qué liquidar": los lotes con stock próximos a vencer (uno por semana
+    // ISO y por lote, migración 028), y una vez cada lote que venció con stock (para retirarlo).
     public static function revisarVencimientos(string $ahora, string $semanaIso, array &$conteo): void
     {
         $veterinarias = ReporteRepositorio::veterinarias();
-        foreach (ReporteRepositorio::obtenerProductosPorVencer(ParametrosMotor::diasLiquidar()) as $prod) {
-            $dto = (int) $prod['dias_restantes'] < 10 ? 30 : 15;
-            $mensaje = "{$prod['nombre']}: vence el " . self::fecha($prod['fecha_vencimiento']) . ", quedan {$prod['stock']}. Descuento sugerido: {$dto}%";
+        foreach (ReporteRepositorio::obtenerLotesPorVencer(ParametrosMotor::diasLiquidar()) as $lote) {
+            $mensaje = LotesPorVencer::texto($lote, LotesPorVencer::descuento((int) $lote['dias_restantes']));
             foreach ($veterinarias as $veterinaria) {
-                $idOp = "liquidar-{$prod['id']}-{$semanaIso}-vet-{$veterinaria}";
+                $idOp = "liquidar-{$lote['producto_id']}-lote-{$lote['lote_id']}-{$semanaIso}-vet-{$veterinaria}";
                 self::enviarUnico($veterinaria, 'PROMOCION', 'WEB', $mensaje, $ahora, $idOp, 'liquidar', $conteo);
+            }
+        }
+        foreach (ReporteRepositorio::obtenerLotesVencidos() as $lote) {
+            $mensaje = LotesPorVencer::textoVencido($lote);
+            foreach ($veterinarias as $veterinaria) {
+                $idOp = "lote-vencido-{$lote['lote_id']}-vet-{$veterinaria}";
+                self::enviarUnico($veterinaria, 'STOCK_BAJO', 'WEB', $mensaje, $ahora, $idOp, 'lote_vencido', $conteo);
             }
         }
     }

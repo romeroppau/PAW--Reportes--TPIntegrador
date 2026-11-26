@@ -9,29 +9,19 @@ class ReporteControlador
 
         $quePromocionar = MotorRecomendaciones::revisarFranjasConPocosTurnos();
 
-        // Productos a liquidar
-        $prodsVencer = ReporteRepositorio::obtenerProductosPorVencer(ParametrosMotor::diasLiquidar());
-        $liquidarRes = [];
-        foreach ($prodsVencer as $p) {
-            $dto = (int)$p['dias_restantes'] < 10 ? 30 : 15;
-            $precioSugerido = round($p['precio'] * (1 - $dto / 100), 2);
-            $liquidarRes[] = [
-                'producto_id' => (int)$p['id'],
-                'nombre' => $p['nombre'],
-                'fecha_vencimiento' => $p['fecha_vencimiento'],
-                'dias_restantes' => (int)$p['dias_restantes'],
-                'stock' => (int)$p['stock'],
-                'precio' => (float)$p['precio'],
-                'descuento_sugerido' => $dto,
-                'precio_sugerido' => $precioSugerido,
-                'sugerencia' => "{$p['nombre']}: vence el " . date('d/m/Y', strtotime($p['fecha_vencimiento'])) . ", quedan {$p['stock']}. Descuento sugerido: {$dto}%"
-            ];
-        }
+        // Qué liquidar: los lotes que vencen pronto (migración 028: cada lote con su vencimiento), y los
+        // lotes vencidos con stock, para retirarlos.
+        $liquidarRes = array_map(
+            [LotesPorVencer::class, 'sugerencia'],
+            ReporteRepositorio::obtenerLotesPorVencer(ParametrosMotor::diasLiquidar())
+        );
+        $vencidos = array_map([LotesPorVencer::class, 'vencido'], ReporteRepositorio::obtenerLotesVencidos());
 
         Response::json([
             'fecha_referencia' => $hoy,
             'que_promocionar' => $quePromocionar,
-            'que_liquidar' => $liquidarRes
+            'que_liquidar' => $liquidarRes,
+            'lotes_vencidos' => $vencidos,
         ]);
     }
 
