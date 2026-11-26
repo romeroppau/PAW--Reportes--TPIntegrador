@@ -107,7 +107,8 @@ class MotorRecomendaciones
         foreach (ReporteRepositorio::obtenerLotesVencidos() as $lote) {
             $mensaje = LotesPorVencer::textoVencido($lote);
             foreach ($veterinarias as $veterinaria) {
-                $idOp = "lote-vencido-{$lote['lote_id']}-vet-{$veterinaria}";
+                // Los lotes de insumos (029) tienen su propia numeración de ids: otro id_operacion.
+                $idOp = ($lote['tipo'] === 'insumo' ? 'lote-insumo-vencido-' : 'lote-vencido-') . "{$lote['lote_id']}-vet-{$veterinaria}";
                 self::enviarUnico($veterinaria, 'STOCK_BAJO', 'WEB', $mensaje, $ahora, $idOp, 'lote_vencido', $conteo);
             }
         }
