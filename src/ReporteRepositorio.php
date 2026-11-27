@@ -2,10 +2,20 @@
 
 class ReporteRepositorio
 {
+    // La conexión, con la hora de Argentina: CURDATE() y NOW() dan el día de acá y no el de UTC (la
+    // base de producción está en UTC: de 21 a 24 h, CURDATE() ya sería mañana). Igual que Inventario.
+    private static function conectar(): PDO
+    {
+        $pdo = Database::conectar();
+        $pdo->exec("SET time_zone = '-03:00'");
+
+        return $pdo;
+    }
+
     // Las que le tocan entre hoy y dentro de $dias días (ParametrosMotor::diasAvisoVacuna()).
     public static function obtenerVacunasProximas(int $dias): array
     {
-        $pdo = Database::conectar();
+        $pdo = self::conectar();
         $stmt = $pdo->prepare("
             SELECT e.id AS evento_id, e.nombre AS vacuna, e.fecha_programada,
                    m.id AS mascota_id, m.nombre AS mascota_nombre, u.id AS usuario_id, u.telefono
@@ -22,7 +32,7 @@ class ReporteRepositorio
 
     public static function obtenerVacunasVencidas(): array
     {
-        $pdo = Database::conectar();
+        $pdo = self::conectar();
         $stmt = $pdo->query("
             SELECT e.id AS evento_id, e.nombre AS vacuna, e.fecha_programada,
                    m.id AS mascota_id, m.nombre AS mascota_nombre, u.id AS usuario_id, u.telefono
@@ -42,7 +52,7 @@ class ReporteRepositorio
     {
         $fechaPrimero = (new DateTimeImmutable($hoy))->modify("-$primero days")->format('Y-m-d');
         $fechaSegundo = (new DateTimeImmutable($hoy))->modify("-$segundo days")->format('Y-m-d');
-        $pdo = Database::conectar();
+        $pdo = self::conectar();
         $stmt = $pdo->prepare("
             SELECT a.id AS adopcion_id, a.fecha_fin, m.nombre AS mascota_nombre, u.id AS adoptante_id
             FROM adopcion a
@@ -64,7 +74,7 @@ class ReporteRepositorio
     // Las veterinarias (los avisos de stock y de qué liquidar van a cada una).
     public static function veterinarias(): array
     {
-        $filas = Database::conectar()->query("SELECT id FROM usuario WHERE rol = 'VETERINARIO' ORDER BY id")->fetchAll();
+        $filas = self::conectar()->query("SELECT id FROM usuario WHERE rol = 'VETERINARIO' ORDER BY id")->fetchAll();
         return array_map(fn (array $f): int => (int) $f['id'], $filas);
     }
 
@@ -72,7 +82,7 @@ class ReporteRepositorio
     // o usar: sin los lotes vencidos (migración 028 en productos, 029 en insumos).
     public static function obtenerStockBajo(int $limite): array
     {
-        $pdo = Database::conectar();
+        $pdo = self::conectar();
         $stmt = $pdo->prepare("
             SELECT * FROM (
                 SELECT 'producto' AS tipo, p.id, p.nombre,
@@ -96,7 +106,7 @@ class ReporteRepositorio
     // de los productos activos, el que vence primero arriba (migración 028: el vencimiento es de cada lote).
     public static function obtenerLotesPorVencer(int $dias): array
     {
-        $pdo = Database::conectar();
+        $pdo = self::conectar();
         $stmt = $pdo->prepare("
             SELECT p.id AS producto_id, p.nombre, p.precio, l.id AS lote_id, l.numero, l.codigo, l.stock,
                    DATE_FORMAT(l.vencimiento, '%Y-%m-%d') AS fecha_vencimiento,
@@ -116,7 +126,7 @@ class ReporteRepositorio
     // los productos y, desde la migración 029, de los insumos activos. tipo: "producto" o "insumo".
     public static function obtenerLotesVencidos(): array
     {
-        $pdo = Database::conectar();
+        $pdo = self::conectar();
         return $pdo->query("
             SELECT * FROM (
                 SELECT 'producto' AS tipo, p.id AS producto_id, NULL AS insumo_id, p.nombre, l.id AS lote_id,
@@ -137,7 +147,7 @@ class ReporteRepositorio
 
     public static function obtenerTurnosUltimasCuatroSemanas(): array
     {
-        $pdo = Database::conectar();
+        $pdo = self::conectar();
         $stmt = $pdo->query("
             SELECT fecha, hora, estado
             FROM turno
@@ -150,7 +160,7 @@ class ReporteRepositorio
 
     public static function obtenerTurnosAtendidos(?string $desde, ?string $hasta): array
     {
-        $pdo = Database::conectar();
+        $pdo = self::conectar();
         $sql = "SELECT t.*, m.nombre AS mascota_nombre FROM v_turnos_atendidos t JOIN mascota m ON m.id = t.mascota_id WHERE 1=1";
         $params = [];
         if ($desde) { $sql .= " AND t.fecha >= :desde"; $params['desde'] = $desde; }
@@ -162,9 +172,19 @@ class ReporteRepositorio
 
     public static function obtenerStockYMovimientos(?string $desde, ?string $hasta): array
     {
-        $pdo = Database::conectar();
-        $productos = $pdo->query("SELECT id, nombre, stock, precio, fecha_vencimiento FROM producto WHERE activo = 1")->fetchAll();
-        $insumos = $pdo->query("SELECT id, nombre, stock, costo, estado FROM insumo WHERE activo = 1")->fetchAll();
+        $pdo = self::conectar();
+        // El stock sin lo vencido (27/11): lo vencido no se vende ni se usa. La tarea diaria de Inventario
+        // lo da de baja; hasta que corre, no se cuenta.
+        $productos = $pdo->query("SELECT p.id, p.nombre,
+                                         (SELECT COALESCE(SUM(l.stock), 0) FROM lote_producto l
+                                          WHERE l.producto_id = p.id AND (l.vencimiento IS NULL OR l.vencimiento >= CURDATE())) AS stock,
+                                         p.precio, p.fecha_vencimiento
+                                  FROM producto p WHERE p.activo = 1")->fetchAll();
+        $insumos = $pdo->query("SELECT i.id, i.nombre,
+                                       (SELECT COALESCE(SUM(l.stock), 0) FROM lote_insumo l
+                                        WHERE l.insumo_id = i.id AND (l.vencimiento IS NULL OR l.vencimiento >= CURDATE())) AS stock,
+                                       i.costo, i.estado
+                                FROM insumo i WHERE i.activo = 1")->fetchAll();
         
         $sql = "SELECT * FROM movimiento_inventario WHERE 1=1";
         $params = [];
